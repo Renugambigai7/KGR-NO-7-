@@ -1,0 +1,120 @@
+import mysql.connector
+import datetime
+mydb = mysql.connector.connect(
+    host="localhost",  
+    user="root",           
+    password="12345",  
+    database="air_tickets"  
+)
+mycursor = mydb.cursor()
+try:
+    mycursor.execute("""
+        CREATE TABLE IF NOT EXISTS bookings (
+            booking_id VARCHAR(255),
+            seat_number VARCHAR(255),
+            seat_type VARCHAR(255),
+            ticket_price VARCHAR(255),
+            food_order VARCHAR(255),
+            total_price VARCHAR(255),
+            booking_date VARCHAR(255)
+        )
+    """)
+    print("Table created successfully or already exists.")
+except mysql.connector.Error as err:
+    print(f"Error creating table: {err}")
+countries = ['USA', 'Canada', 'UK', 'Australia', 'Japan']
+ticket_prices = [500, 350, 400, 600, 700]
+GST_RATE = 18
+total_seats = 36
+window_seats = 8
+regular_seats = total_seats - window_seats
+seats_available = [0] * total_seats  
+food_prices = [75, 50, 60]
+def calculate_total_price(price):
+    gst = (price * GST_RATE) / 100
+    total_price = price + gst
+    return total_price, gst
+def calculate_food_price(selected_foods):
+    total_food_price = sum([food_prices[i] for i in selected_foods])
+    gst_food = (total_food_price * GST_RATE) / 100
+    total_food_price_with_gst = total_food_price + gst_food
+    return total_food_price_with_gst, gst_food
+def book_ticket():
+    print("Welcome to Air! Ticket Booking System.\n")  
+    while True:
+        try:
+            print("\nAvailable Seats (Total 36 Seats):")            
+            available = False
+            for i in range(total_seats):
+                if seats_available[i] == 0:
+                    seat_type = "Window Seat" if i < window_seats else "Regular Seat"
+                    print(f"Seat {i + 1} - {seat_type}")
+                    available = True
+            if not available:
+                print("Sorry, all seats are fully booked.")
+                break            
+            user_choice = int(input("\nEnter the seat number you want to book (1-36) or -1 to exit: "))            
+            if user_choice == -1:
+                print("Exiting the booking system... Thank you for using Air!")
+                break            
+            if user_choice < 1 or user_choice > total_seats:
+                print("Invalid choice. Please enter a seat number between 1 and 36.")
+                continue            
+            seat_index = user_choice - 1        
+            if seats_available[seat_index] == 1:
+                print(f"\nSorry, Seat {user_choice} is already booked!")
+                arrange_choice = input("Would you like to choose another seat? (yes/no): ").lower()
+                if arrange_choice == "yes":
+                    continue
+                elif arrange_choice == "no":
+                    print("Exiting ticket booking...\n")
+                    break
+                else:
+                    print("Invalid input. Please choose 'yes' or 'no'.")
+                    continue
+            price = ticket_prices[0]  
+            total_price, gst = calculate_total_price(price)            
+            print(f"\nBooking details for Seat {user_choice}:")
+            print(f"Base Ticket Price: ${price}")
+            print(f"GST ({GST_RATE}%): ${gst:.2f}")
+            print(f"Total Price: ${total_price:.2f}")
+            food_choice = input("\nWould you like to add food to your booking? (yes/no): ").lower()
+            total_food_price = 0
+            gst_food = 0            
+            if food_choice == "yes":
+                print("\nAvailable Food Options:")
+                for i, food in enumerate(["Sandwich", "Snack", "Drink"]):
+                    print(f"{i + 1}. {food} - ${food_prices[i]}")                
+                selected_foods = input("\nEnter the numbers of the food items you want to add (comma separated, e.g. 1,3): ")
+                selected_foods = [int(x) - 1 for x in selected_foods.split(",") if x.isdigit()]
+                total_food_price_with_gst, gst_food = calculate_food_price(selected_foods)
+                total_food_price = total_food_price_with_gst               
+                print(f"\nFood Order Details:")
+                for i in selected_foods:
+                    print(f"{['Sandwich', 'Snack', 'Drink'][i]} - ${food_prices[i]}")
+                print(f"Total Food Price (including GST): ${total_food_price:.2f}")            
+            total_price += total_food_price
+            total_gst = gst + gst_food            
+            booking_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"\nFinal Booking Details:")
+            print(f"Total Ticket Price: ${total_price:.2f} (Including GST)")           
+            print(f"Booking Date: {booking_date}")
+            confirmation = input("Do you want to confirm the booking? (yes/no): ").lower()
+            if confirmation == 'yes':
+                booking_id = f"BOOK{user_choice}"
+                seats_available[seat_index] = 1
+                mycursor.execute("""
+                    INSERT INTO bookings (booking_id, seat_number, seat_type, ticket_price, food_order, total_price, booking_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (booking_id, user_choice, "Window Seat" if seat_index < window_seats else "Regular Seat", price, str(selected_foods), total_price, booking_date))
+                mydb.commit()
+                print(f"Booking confirmed for Seat {user_choice}. Total amount charged: ${total_price:.2f}\n")
+            elif confirmation == 'no':
+                print("Booking cancelled.\n")
+            else:
+                print("Invalid response, please enter 'yes' or 'no'.")
+                continue        
+        except ValueError:
+            print("Invalid input. Please enter a valid number.")
+            continue
+book_ticket()
